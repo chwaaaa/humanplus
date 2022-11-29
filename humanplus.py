@@ -296,28 +296,28 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         #pdb.set_trace()
         saver.restore(sess, tf.train.latest_checkpoint(checkpoint_path))
         print("Model restored from: {}\n".format(tf.train.latest_checkpoint(checkpoint_path)))
-        '''
-        except:
-            model_path = os.path.join(checkpoint_path, "params_fold0.npz")
-            source_model_name = 'deepsleepnet'
-            # Load target model
-            with np.load(model_path) as f:
-                for k, v in f.iteritems():
-                    if "Adam" in k or "softmax" in k or "power" in k or "global_step" in k:
-                        if 'softmax' in k and 'Adam' not in k:
-                            pass
-                        else:
-                            continue
-                    prev_k = k
-                    k = k.replace(source_model_name, valid_net.name)
-                    tmp_tensor = tf.get_default_graph().get_tensor_by_name(k)
-                    sess.run(
-                        tf.assign(
-                            tmp_tensor,
-                            v
-                        )
-                    )
-        '''
+
+        # except:
+        #     model_path = os.path.join(checkpoint_path, "params_fold0.npz")
+        #     source_model_name = 'deepsleepnet'
+        #     # Load target model
+        #     with np.load(model_path) as f:
+        #         for k, v in f.iteritems():
+        #             if "Adam" in k or "softmax" in k or "power" in k or "global_step" in k:
+        #                 if 'softmax' in k and 'Adam' not in k:
+        #                     pass
+        #                 else:
+        #                     continue
+        #             prev_k = k
+        #             k = k.replace(source_model_name, valid_net.name)
+        #             tmp_tensor = tf.get_default_graph().get_tensor_by_name(k)
+        #             sess.run(
+        #                 tf.assign(
+        #                     tmp_tensor,
+        #                     v
+        #                 )
+        #             )
+
         print("Predicting ...\n")
 
         # Evaluate the model on the subject data
