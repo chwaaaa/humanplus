@@ -286,7 +286,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         # Initialize parameters
         valid_net.init_ops()
 
-        checkpoint_path = os.path.join( '../model/fold0', "deepsleepnet"
+        checkpoint_path = os.path.join( './model/fold0', "deepsleepnet"
         )
         # Restore the trained model
         saver = tf.train.Saver()
