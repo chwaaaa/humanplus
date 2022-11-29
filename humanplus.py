@@ -28,7 +28,6 @@ import datetime
 
 import tempfile
 
-import torch 
 from sklearn.metrics import confusion_matrix, f1_score, cohen_kappa_score
 
 from deepsleep.model import DeepSleepNet
@@ -38,7 +37,6 @@ from deepsleep.utils import iterate_batch_seq_minibatches
 
 import zipfile
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def load_npz_file(npz_file):
     """Load data and labels from a npz file."""
