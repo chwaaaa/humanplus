@@ -1,19 +1,20 @@
 import matplotlib
 matplotlib.use('Agg')
 import os
+#str = "export MPLBACKEND= 'Agg' "
+#os.system(str)
 
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 if os.environ.get('DISPLAY','') == '':
     print('no display found. Using :0.0')
     os.environ.__setitem__('DISPLAY', ':0.0')
+
+from io import BytesIO
 from footer import footer
 import streamlit as st
 import time
 import pdb
 import numpy as np
 import tensorflow as tf
-
-
 import itertools
 
 import matplotlib.pyplot as plt
@@ -27,12 +28,140 @@ import datetime
 
 import tempfile
 
+import torch 
 from sklearn.metrics import confusion_matrix, f1_score, cohen_kappa_score
 
 from deepsleep.model import DeepSleepNet
 from deepsleep.nn import *
+
 from deepsleep.utils import iterate_batch_seq_minibatches
-from util import load_npz_file, plot_hypnogram, plot_confusion_matrix, plot_graph
+
+import zipfile
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+def load_npz_file(npz_file):
+    """Load data and labels from a npz file."""
+    with np.load(npz_file, allow_pickle=True) as f:
+        data = f["x"]
+        labels = f["y"]
+        sampling_rate = f["fs"]
+    data = np.squeeze(data)
+    data = data[:, :, np.newaxis, np.newaxis]
+    data = data.astype(np.float32)
+    labels = labels.astype(np.int32)
+
+    return data, labels, sampling_rate
+
+def plot_confusion_matrix(cm,
+                          target_names= np.asarray(['W', 'N1', 'N2', 'N3', 'REM']),
+                          title='Confusion matrix',
+                          cmap=None,
+                          normalize=True):
+    if cmap is None:
+        cmap = plt.get_cmap('Blues')
+
+    fig = plt.figure(figsize=(5, 5))
+    im = plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+
+    if target_names is not None:
+        tick_marks = np.arange(len(target_names))
+        plt.xticks(tick_marks, target_names, rotation=45)
+        plt.yticks(tick_marks, target_names)
+
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+
+
+    thresh = cm.max() / 1.5 if normalize else cm.max() / 2
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        if normalize:
+            plt.text(j, i, "{:0.4f}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+        else:
+            plt.text(j, i, "{:,}".format(cm[i, j]),
+                     horizontalalignment="center",
+                     color="white" if cm[i, j] > thresh else "black")
+
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    ax = plt.gca()
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.05)
+
+    plt.colorbar(im, cax=cax)
+    plt.tight_layout()
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png")
+    st.image(buf)
+
+
+
+
+
+def plot_hypnogram(y_true, y_pred,
+                          title=None,c='brown'
+                          ):
+    if not title:
+        title = 'hynpogram'
+
+    classes = np.asarray(['W', 'N1', 'N2', 'N3', 'REM'])
+
+    fig, ax = plt.subplots(2,1)
+    c = 'brown'
+    x_axis = np.arange(y_pred.shape[0])
+    ax[0].plot(x_axis, y_pred, color=c)
+
+    # We want to show all ticks...
+    ax[0].set(xticks=np.arange(0, y_true.shape[0], 3600/30),
+           yticks=np.arange(classes.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=np.arange(0, y_pred.shape[0], 3600/30)/120, yticklabels=classes,
+           xlabel='hour (h)', aspect=30)
+    ax[0].set_ylabel('True', rotation=0, fontsize = 12, labelpad=40, color=c)
+    ax[0].spines['right'].set_visible(False)
+    ax[0].spines['top'].set_visible(False)
+    ax[0].yaxis.set_ticks_position('left')
+    ax[0].xaxis.set_ticks_position('bottom')
+
+    c = 'blue'
+
+    ax[1].plot(x_axis, y_pred, color=c)
+
+    ax[1].set(xticks=np.arange(0, y_true.shape[0], 3600/30),
+           yticks=np.arange(classes.shape[0]),
+           # ... and label them with the respective list entries
+           xticklabels=np.arange(0, y_pred.shape[0], 3600/30)/120, yticklabels=classes,
+           xlabel='hour (h)', aspect=30)
+    ax[1].set_ylabel('Predicted', rotation=0, fontsize = 12, labelpad=40, color=c)
+    ax[1].spines['right'].set_visible(False)
+    ax[1].spines['top'].set_visible(False)
+    ax[1].yaxis.set_ticks_position('left')
+    ax[1].xaxis.set_ticks_position('bottom')
+
+    fig.tight_layout()
+    return fig
+
+def print_performance(sess, network_name, n_examples, duration, loss, cm, acc, f1):
+    # Get regularization loss
+    reg_loss = tf.add_n(tf.get_collection("losses", scope=network_name + "\/"))
+    reg_loss_value = sess.run(reg_loss)
+
+    # Print performance
+    print(
+        "duration={:.3f} sec, n={}, loss={:.3f} ({:.3f}), acc={:.3f}, "
+        "f1={:.3f}".format(
+            duration, n_examples, loss, reg_loss_value, acc, f1
+        )
+    )
+    print(cm)
+    print(" ")
+
 
 def custom_run_epoch(
     sess,
@@ -135,19 +264,13 @@ def loadEEG(uploaded_eeg):
 
 
 def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = True, print_eeg=None, start_time = None, end_time=None):
-    tf.debugging.set_log_device_placement(True)
     predict_start=time.time()
     # Ground truth and predictions
     y_true = []
     y_pred = []
 
-    #Set GPU options
-    config = tf.ConfigProto()
-    config.gpu_options.allow_growth = True
-    config.log_device_placement=True
-
     # The model will be built into the default Graph
-    with  tf.Graph().as_default() and tf.Session(config=config) as sess:
+    with tf.Graph().as_default(), tf.Session() as sess:
         # Build the network
         valid_net = DeepSleepNet(
             batch_size=1,
@@ -165,7 +288,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         # Initialize parameters
         valid_net.init_ops()
 
-        checkpoint_path = os.path.join( './model/fold0', "deepsleepnet"
+        checkpoint_path = os.path.join( '../model/fold0', "deepsleepnet"
         )
         # Restore the trained model
         saver = tf.train.Saver()
@@ -205,6 +328,17 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
                 is_train=False,
             )
 
+        n_examples = len(y_true_)
+        cm_ = confusion_matrix(y_true_, y_pred_)
+        acc_ = np.mean(y_true_ == y_pred_)
+        mf1_ = f1_score(y_true_, y_pred_, average="macro")
+        # Report performance
+        print_performance(
+            sess, valid_net.name,
+            n_examples, duration, loss,
+            cm_, acc_, mf1_
+        )
+
         y_true.extend(y_true_)
         y_pred.extend(y_pred_)
 
@@ -218,7 +352,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
     kappa =  cohen_kappa_score(y_true, y_pred)
 
     #print out
-    st.markdown(" <font size='5'>  Overall prediction performance </font> ", unsafe_allow_html=True)
+    st.subheader("Overall prediction performance")
     st.markdown("Sampling rate= {:d} Hz,  # of 30-s epochs ={} ({:.3f} hours),".format(
             int(sampling_rate), n_examples, n_examples * 30/3600
         ))
@@ -243,16 +377,14 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
             hypno = plot_hypnogram(y_true, y_pred,
                            title=None, c='brown'
                            )
+            st.set_option('deprecation.showPyplotGlobalUse', False)
+            st.pyplot()
 
     if print_eeg:
         with col3:
-
-            dur_hour, dur_min =divmod((end_time-start_time).seconds, 3600)
-            start_time= start_time.time()
-            end_time = end_time.time()
             st.markdown(
-                'EEG data and predicted stages from {} to {} ({:d} hour {:d} min)'.format(start_time.strftime("%H:%M"),
-                                                                                          end_time.strftime("%H:%M"), dur_hour, int(dur_min/60)))
+                'EEG data and predicted stages from {} to {}'.format(start_time.strftime("%H:%M"),
+                                                                                          end_time.strftime("%H:%M")))
             if start_time != end_time:
 
                 def timetointeger(dtime):
@@ -263,9 +395,29 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
                 min_dur_ind  = timetointeger(start_time)
                 max_dur_ind  = timetointeger(end_time)
 
-                plot_graph(x, y_true, y_pred, min_dur_ind, max_dur_ind, sampling_rate)
+                plot_data = pd.DataFrame({
+                    "Amplitude": x[min_dur_ind:max_dur_ind].flatten(),
+                    "Time (h)": np.arange(min_dur_ind*x.shape[1], max_dur_ind*x.shape[1])/3600/sampling_rate
+                    })
 
+                line_chart = alt.Chart(plot_data).mark_line().encode(
+                y= "Amplitude",
+                x= "Time (h)",
+                )
+                classes = np.asarray(['W', 'N1', 'N2', 'N3', 'REM'])
 
+                annotations_data = pd.DataFrame({
+                    "prediction": classes[y_pred[min_dur_ind:max_dur_ind].flatten()],
+                    "Time (h)":np.arange(min_dur_ind*x.shape[1]+int(x.shape[1]/2), max_dur_ind*x.shape[1]+int(x.shape[1]/2), x.shape[1])/3600/sampling_rate,
+                    "Predicted stage": np.ones(len(y_pred[min_dur_ind:max_dur_ind].flatten()))*x[min_dur_ind:max_dur_ind].flatten().min() })
+
+                annotation_layer = alt.Chart(annotations_data).mark_text(size=10,  dx=-8, dy=-10, align="left").encode(
+                                        x="Time (h)",
+                                        y="Predicted stage",
+                                        text = alt.Text("prediction")
+                                    )
+
+                st.altair_chart((line_chart+annotation_layer).interactive(), use_container_width=True)
             else:
                 st.error('Select valid time duration!')
 
@@ -305,34 +457,23 @@ if __name__ == '__main__':
                 end_time= datetime.datetime(2000,1,1,int(end_hour),int(end_min))
                 if ((end_time - start_time).days < 0) or (end_time-start_time==datetime.timedelta(0)):
                     st.error('Select valid time duration!')
-                else:
-                    selected_hour,selected_minute = divmod((end_time - start_time).seconds ,3600)
-                    st.markdown('Duration of EEG: {:d} hour {:02d} min'.format(selected_hour, int(selected_minute/60)))
-
-            #
-            # st.header('Test options')
-            #
-            # if len(gpus)>0:
-            #     device_option = st.radio("Select test options", key="CPU", options=["CPU","GPU"])
-            # else:
-            #     device_option = st.radio("Select test options", key="CPU", options=["CPU"])
-
 
             predict_button = st.button("Predict", key='predict_button')
 
+
         if predict_button:
-            predict( x, y, sampling_rate, print_confusion_matrix, print_hypnogram, print_eeg, start_time, end_time)
-
-
-    st.set_page_config(layout="wide")
-
+            predict( x, y, sampling_rate, print_confusion_matrix, print_hypnogram, print_eeg, start_time.time(), end_time.time())
     footer()
 
     st.title('Humanplus')
     st.subheader("Deep learning based automatic sleep staging :sleeping:")
     with st.sidebar:
         st.header('EEG file upload')
-        uploaded_eeg = st.file_uploader("Upload EEG", type=['npz'])
+        uploaded_eeg = st.file_uploader("Upload EEG")
+
+    #st.markdown('The data used for this project - [Sleep-EDF Database Expanded](https://www.physionet.org/content/sleep-edfx/1.0.0/) ')
+    #st.markdown('Created by - [ICP lab](https://sagittak.wixsite.com/icplab)')
+    #st.markdown('Github Repository - [humanplus](https://github.com/chwaaaa/humanplus)')
 
     if uploaded_eeg is not None:
         start()
