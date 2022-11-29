@@ -1,2 +1,2 @@
-model_checkpoint_path: "/model/fold0/deepsleepnet/model_fold0.ckpt-200"
-all_model_checkpoint_paths: "/model/fold0/deepsleepnet/model_fold0.ckpt-200"
+model_checkpoint_path: "./model/fold0/deepsleepnet/model_fold0.ckpt-200"
+all_model_checkpoint_paths: "./model/fold0/deepsleepnet/model_fold0.ckpt-200"
