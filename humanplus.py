@@ -286,7 +286,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         # Initialize parameters
         valid_net.init_ops()
 
-        checkpoint_path = os.path.join( './model/fold0', "deepsleepnet"
+        checkpoint_path = os.path.join( '/model/fold0', "deepsleepnet"
         )
         # Restore the trained model
         saver = tf.train.Saver()
@@ -294,6 +294,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         try:
             saver.restore(sess, tf.train.latest_checkpoint(checkpoint_path))
             print("Model restored from: {}\n".format(tf.train.latest_checkpoint(checkpoint_path)))
+        '''
         except:
             model_path = os.path.join(checkpoint_path, "params_fold0.npz")
             source_model_name = 'deepsleepnet'
@@ -314,7 +315,7 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
                             v
                         )
                     )
-
+        '''
         print("Predicting ...\n")
 
         # Evaluate the model on the subject data
