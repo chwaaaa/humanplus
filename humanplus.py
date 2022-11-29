@@ -291,9 +291,9 @@ def predict( x,y, sampling_rate, print_confusion_matrix=True, print_hypnogram = 
         # Restore the trained model
         saver = tf.train.Saver()
         # loadModel(sess, checkpoint_path)
-        try:
-            saver.restore(sess, tf.train.latest_checkpoint(checkpoint_path))
-            print("Model restored from: {}\n".format(tf.train.latest_checkpoint(checkpoint_path)))
+        #try:
+        saver.restore(sess, tf.train.latest_checkpoint(checkpoint_path))
+        print("Model restored from: {}\n".format(tf.train.latest_checkpoint(checkpoint_path)))
         '''
         except:
             model_path = os.path.join(checkpoint_path, "params_fold0.npz")
