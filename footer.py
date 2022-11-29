@@ -70,6 +70,7 @@ def layout(*args):
     st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 
+
 def footer():
     myargs = [
         "The data used for this project - ",
